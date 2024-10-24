@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define directories and backup settings
-LOCAL_USER="thepot"
+LOCAL_USER="user"
 NEXTCLOUD_MOUNT="/home/$LOCAL_USER/nextcloud"
 HDD_MOUNT="/home/$LOCAL_USER/hdd"
 BACKUP_DIR="$HDD_MOUNT/nextcloud-backup"
