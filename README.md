@@ -1,11 +1,11 @@
-# Automounting WebDAV and HDD for NextCloud Backup with `systemd` and `rsync` on Raspberry Pi
+# Backup your WebDAV mount + systemd automount
 
-This guide demonstrates how to use the `systemd` automount feature to mount the NextCloud WebDAV and an external HDD on-demand. It also covers how to back up all the data using `rsync`. This setup is ideal for Raspberry Pi environments and similar devices.
+This project demonstrates how to use the `systemd` automount feature to mount a WebDAV service (e.g., NextCloud) and an external HDD on-demand. It also provides a solution for backing up all the data using `rsync`. While the setup was originally tested on a Raspberry Pi, it can be adapted for other systems.
 
 *Note*:  
-Be sure to replace `user` with your local system username where appropriate.
+Be sure to replace `user` and the URLs with your local system username and WebDAV server details where appropriate.
 
-## Environment Used
+## Environment
 
 **Hardware**:
 - Raspberry Pi 3
