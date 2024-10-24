@@ -40,6 +40,19 @@ Ensure that the following entry is present to store your WebDAV credentials secu
 /home/user/nextcloud <user> <generate app password in nextcloud>
 ```
 
+### `/etc/davfs2/davfs2.conf`
+
+### Disable Locks
+
+To disable file locking in `davfs2`, which can be necessary if you're facing issues with file locks in NextCloud (as it does not fully support WebDAV locking), add the following to your configuration:
+
+```shell
+use_locks 0
+```
+
+Disabling locks can help avoid problems with stale or conflicting file locks when using WebDAV. However, be aware that this can also lead to issues in multi-user environments where multiple clients are modifying the same files.
+
+
 ### Mount
 
 After adding the configurations to `/etc/fstab`, create the directories for the mount points and reload `systemd` to start automounting:
