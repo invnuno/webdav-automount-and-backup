@@ -54,11 +54,22 @@ systemctl start home-user-hdd.automount
 
 ## Backup
 
-### Create a Backup Script
+### Bash Script
 
-Use the bash script available in the repository to back up all the data from the WebDAV mountpoint to the external HDD using `rsync` (`nextcloud-to-hdd-backup.sh`).
+You can either use the bash script available in the repository to back up all the data from the WebDAV mountpoint to the external HDD using `rsync` (`nextcloud-to-hdd-backup.sh`), or create your own with a similar command:
 
-This script will synchronize the content from the NextCloud WebDAV mount to your external HDD, removing any files from the backup that have been deleted in the source directory.
+```shell
+rsync -az --delete --partial "/home/user/nextcloud/" "/home/user/hdd/nextcloud-backup/"
+```
+
+This command will:
+
+- **`-a`**: Archive mode (preserves permissions, symlinks, etc.)
+- **`-z`**: Compress the data during transfer
+- **`--delete`**: Remove files from the backup directory that no longer exist in the source
+- **`--partial`**: Allows for resuming incomplete transfers
+
+It synchronizes the content from the NextCloud WebDAV mount to your external HDD, ensuring that the backup stays up to date and any deleted files are removed.
 
 ### Automate the Backup
 
