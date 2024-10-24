@@ -105,7 +105,7 @@ journalctl -u home-user-hdd.automount
 If you encounter an error with exit code 255, review your mount options in `/etc/fstab`:
 
 ```shell
-Oct 23 23:04:24 prusalink systemd[1]: home-user-nextcloud.mount: Mount process exited, code=exited, status=255
+Oct 23 23:04:24 rpi systemd[1]: home-user-nextcloud.mount: Mount process exited, code=exited, status=255
 ```
 
 Common causes of this issue include incorrect WebDAV URLs or network connectivity problems.
@@ -114,7 +114,12 @@ Common causes of this issue include incorrect WebDAV URLs or network connectivit
 
 ### WebDAV Cache Size
 
-When backing up large files, `davfs2` caches each file to be read or written. By default, the cache size is set to 50 MB, which may impact performance. If your system has sufficient memory available, consider increasing the cache size for better performance:
+When backing up large files, `davfs2` caches each file to be read or written. By default, the cache size is set to 50 MB, which may impact performance.
+~~~shell
+Oct 24 01:31:21 rpi mount.davfs[6704]: open files exceed max cache size by 50 MiBytes
+~~~
+
+If your system has sufficient memory available, consider increasing the cache size for better performance:
 
 #### `/etc/davfs2/davfs2.conf`
 
