@@ -144,3 +144,4 @@ Make sure to monitor your system's available memory before adjusting this value.
 - [Creating WebDAV mounts on the Linux command line](https://docs.nextcloud.com/server/latest/user_manual/en/files/access_webdav.html#creating-webdav-mounts-on-the-linux-command-line)
 - [NextCloud does not support locks](https://docs.nextcloud.com/server/latest/user_manual/en/files/access_webdav.html#known-issues)
 - [systemd automount using davfs2 not working](https://discourse.osmc.tv/t/systemd-automount-using-davfs2-not-working/94200/5)
+- [Use curl instead of rsync to stream files and not use davfs2 cache](https://unix.stackexchange.com/questions/354026/disable-davfs2-caching)
