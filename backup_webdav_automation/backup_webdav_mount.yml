@@ -5,17 +5,19 @@
   gather_facts: false
 
   vars:
-    my_user: 
-    webdav_user: 
-    webdav_url: 
-    webdav_mount: 
-    webdav_token: 
-    device_path: 
-    device_mount: 
-    backup_path: 
+    my_user: "thepot"
+    webdav_mount: "/home/thepot/nextcloud"
+    device_src: "/dev/sda1"
+    device_mountpoint: "/home/thepot/hdd"
+    backup_path: "/home/thepot/hdd/nextcloud-backup"
+  
+  # For webdav_user, webdav_url and webdav_token variables, use vault.
+  vars_files:
+    - vault.yml
   
   tasks:
     - name: Ensure necessary variables are defined
+      tags: verify
       ansible.builtin.assert:
         that:
           - my_user | regex_search('^[a-z]+')
@@ -23,16 +25,17 @@
           - webdav_url | regex_search('^http')
           - webdav_mount | regex_search('^/')
           - webdav_token| regex_search('^[a-zA-Z0-9-]+$')
-          - device_path | regex_search('^/dev/[a-z]+.*')
-          - device_mount | regex_search('^/')
+          - device_src | regex_search('^/dev/[a-z]+.*')
+          - device_mountpoint | regex_search('^/')
           - backup_path | regex_search('^/')
         success_msg: "You have set all necessary variables to run this playbook"
         fail_msg: |
           You have NOT set all necessary variables to run this playbook.
           Please set the following variables:
-          my_user, webdav_user, webdav_url, webdav_mount, webdav_token, device_path, device_mount, backup_path
+          my_user, webdav_user, webdav_url, webdav_mount, webdav_token, device_src, device_mountpoint, backup_path
 
     - name: Ensure webdav credentials are set
+      tags: configure
       ansible.builtin.lineinfile:
         path: /etc/davfs2/secrets
         line: "{{ webdav_mount }} {{ webdav_user }} {{ webdav_token }}"
@@ -43,28 +46,49 @@
         state: present
 
     - name: Ensure locks are disable in davfs2
+      tags: configure
       ansible.builtin.lineinfile:
         path: /etc/davfs2/davfs2.conf
         line: "use_locks 0"
         state: present
 
     - name: Ensure webdav mount has systemd automount in fstab
+      tags: automount
       ansible.posix.mount:
         src: "{{ webdav_url }}"
-        dest: "{{ webdav_mount }}"
+        path: "{{ webdav_mount }}"
         fstype: davfs
         opts: ro,user,noexec,nofail,_netdev,noauto,x-systemd.automount,x-systemd.mount-timeout=2min
         state: mounted
 
-    - name: Ensure the device has systemd automount in fstab
-      when: device_path | regex_search(^//dev//[a-z]+.*)
-      ansible.posix.mount:
-        src: "{{ device_path }}"
-        dest: "{{ device_mount }}"
-        opts: x-systemd.automount,x-systemd.idle-timeout=2min,rw,sync
-        state: mounted
+    - name: Ensure the correct setup for device or local path
+      tags: automount
+      block:
+        - name: Ensure the device has systemd automount in fstab
+          when: device_src is defined and device_src | regex_search('^/dev/[a-z]+.*') and (local_path is not defined or local_path | regex_search('^/mnt/[a-z]+.*') is not match)
+          ansible.posix.mount:
+            src: "{{ device_src }}"
+            path: "{{ device_mountpoint }}"
+            fstype: auto
+            opts: x-systemd.automount,x-systemd.idle-timeout=2min,rw,sync
+            state: mounted
+    
+        - name: Ensure the local directory exists
+          when: local_path is defined and local_path | regex_search('^/mnt/[a-z]+.*') and (device_src is not defined or device_src | regex_search('^/dev/[a-z]+.*') is not match)
+          ansible.builtin.file:
+            path: "{{ local_path }}"
+            state: directory
 
+      rescue:
+        - name: Exit playbook
+          ansible.builtin.fail:
+            msg: "You need to set device_src (for external device or partition) or local_path (for local directory) to run this playbook"
+      when: device_src is defined or local_path is defined      
+    # End of block
+
+    # Validate if the mountpoints are already created, if not, create them? Before the block above?
     - name: Ensure mountpoints exists
+      tags: automount
       loop:
         - "{{ backup_path }}"
         - "{{ webdav_mount }}"
@@ -73,9 +97,10 @@
         state: directory
 
     - name: Reload daemon to read fstab changes and start automounts
+      tags: automount
       loop:
-        - "{{ webdav_mount | replace('/', '-') }}.automount"
-        - "{{ backup_path | replace('/', '-') }}.automount"
+        - "{{ webdav_mount | regex_replace('^/', '') | replace('/', '-') }}.automount"
+        - "{{ backup_path | regex_replace('^/', '') | replace('/', '-') }}.automount"
       ansible.builtin.systemd:
         daemon_reload: true
         name: "{{ item }}"
