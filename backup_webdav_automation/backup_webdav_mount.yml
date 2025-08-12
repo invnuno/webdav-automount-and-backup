@@ -53,6 +53,14 @@
       ansible.builtin.find:
         paths: "{{ archive_path }}"
         patterns: '*.xz'
+    
+    # Remove the oldest backup archive if there are more than {{ max_backups }}
+    - name: Remove the oldest backup archive
+      tags: archive
+      when: archive_count > max_backups
+      ansible.builtin.file:
+        path: "{{ archive_count | sort(attribute='mtime') | first }}"
+        state: absent
 
     - name: Archiving last backup
       tags: archive
