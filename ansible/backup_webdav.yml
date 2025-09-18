@@ -1,0 +1,103 @@
+---
+# Ansible playbook to backup a systemd-automounted WebDAV mount to an external systemd-automounted disk.
+# Keeps exactly 3 backup versions.
+# Run via cron: e.g., crontab -e then add "0 2 * * * ansible-playbook /home/pi/backup_webdav.yml"
+
+- name: Backup WebDAV Mount
+  hosts: "{{ target_host | default('localhost') }}"
+  become: "{{ use_become | default(false) }}"  # Set to true if root privileges are needed for mounts/rsync
+  gather_facts: true
+
+  vars:
+    # Customize these variables (or move to variables.yml if preferred)
+    webdav_mount: "/mnt/webdav"  # Path where WebDAV is automounted
+    external_disk_mount: "/mnt/external"  # External disk mount point
+    backup_base_dir: "{{ external_disk_mount }}/backup_webdav"  # Base directory for backups
+    max_backups: 3  # Keep this many versions
+    timestamp: "{{ ansible_date_time.iso8601 }}"
+    automount_services:  # List of services to start
+      - "mnt-webdav.automount"  # Your WebDAV automount (customize name)
+      - "mnt-external.automount"    # External disk automount (customize name)
+
+  tasks:
+    - name: Ensure automount services are active
+      tags: [verify, setup]
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        scope: user  # If they are user services; adjust or remove for system services
+        state: started
+        enabled: yes
+      failed_when: false  # Warn on errors but continue
+      loop: "{{ automount_services }}"
+
+    - name: Verify key paths and mounts exist
+      tags: verify
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ webdav_mount }}"
+        - "{{ external_disk_mount }}"
+        - "{{ backup_base_dir }}"
+      register: path_check_results
+    
+    - name: Fail if any required path is missing or not a directory
+      tags: verify
+      ansible.builtin.fail:
+        msg: "ERROR: Path '{{ item.item }}' is missing or not a directory. Please check your setup (exists: {{ item.stat.exists }}, isdir: {{ item.stat.isdir }})."
+      when: not (item.stat.exists | default(false)) or not (item.stat.isdir | default(false))
+      loop: "{{ path_check_results.results | default([]) }}"
+
+    - name: Create backup versions directory if needed
+      tags: backup
+      ansible.builtin.file:
+        path: "{{ backup_base_dir }}/versions"
+        state: directory
+        mode: "0755"
+        recurse: yes  # Ensure parent dirs exist if backup_base_dir doesn't
+
+    - name: Backup WebDAV data to external disk with rsync (uncompressed for speed)
+      tags: backup
+      ansible.posix.synchronize:
+        src: "{{ webdav_mount }}/"
+        dest: "{{ backup_base_dir }}/versions/tmp_backup_{{ timestamp }}/"
+        rsync_opts: ["--archive", "--delete"]
+        mode: push
+      register: sync_result
+    
+    - name: Archive the backup directory into a compressed tar.gz
+      tags: backup
+      ansible.builtin.archive:
+        path: "{{ backup_base_dir }}/versions/tmp_backup_{{ timestamp }}"
+        dest: "{{ backup_base_dir }}/versions/backup_{{ timestamp }}.tar.gz"
+        format: gz  # Default gz level 6: good balance for RPi (download if needed)
+        mode: '0644'
+      when: sync_result.changed | default(false)
+    
+    - name: Remove the uncompressed temporary backup directory
+      tags: backup
+      ansible.builtin.file:
+        path: "{{ backup_base_dir }}/versions/tmp_backup_{{ timestamp }}"
+        state: absent
+      when: sync_result.changed | default(false)
+    
+    # Refactored: Rotate archived backups (delete oldest .tar.gz files)
+    - name: Find and sort existing archived backups by modification time
+      tags: backup
+      ansible.builtin.find:
+        paths: "{{ backup_base_dir }}/versions"
+        file_type: file
+        patterns: "backup_*.tar.gz"
+      register: find_result
+    
+    - name: Remove excess archived backups beyond {{ max_backups }}
+      tags: backup
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ (find_result.files | sort(attribute='mtime') | reverse | list)[max_backups:] | default([]) }}"  # Sort by newest first, remove older
+      when: find_result.files | length > max_backups
+    
+    - name: Output success message
+      tags: always
+      ansible.builtin.debug:
+        msg: "WebDAV backup to {{ backup_base_dir }}/versions/backup_{{ timestamp }}.tar.gz completed. Retained {{ max_backups }} versions. Sync changed {{ sync_result.changed }}."

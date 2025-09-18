@@ -1,0 +1,15 @@
+---
+my_user: "thepot"
+device_src: "/dev/sda1"
+timestamp: "{{ ansible_date_time['iso8601_basic_short'] }}"
+max_backups: '3'
+
+dir_paths:
+  - webdav_mount: "/home/{{ my_user }}/nextcloud"
+  - device_mountpoint: "/home/{{ my_user }}/hdd"
+  - backup_path: "/home/{{ my_user }}/{{ device_mountpoint }}/nextcloud-backup"
+  - archive_path: "/home/{{ my_user }}/{{ device_mountpoint }}/nextcloud-backup-archive"
+
+automount_services:
+  - webdav_automount: "{{ webdav_mount | regex_replace('^/', '') | replace('/', '-') }}.automount"
+  - backup_automount: "{{ backup_path | regex_replace('^/', '') | replace('/', '-') }}.automount"
