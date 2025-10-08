@@ -60,7 +60,7 @@
       ansible.posix.synchronize:
         src: "{{ webdav_mount }}/"
         dest: "{{ backup_base_dir }}/versions/tmp_backup_{{ timestamp }}/"
-        rsync_opts: ["--archive", "--delete"]
+        rsync_opts: ["--archive", "--delete", "--exclude=lost+found", "--exclude=*DS_Store*"]
         mode: push
       register: sync_result
     
