@@ -1,142 +1,92 @@
-# Backup your WebDAV mount + systemd automount
+# WebDAV Backup with Ansible
 
-This project demonstrates how to use the `systemd` automount feature to mount a WebDAV service (e.g., NextCloud) and an external HDD on-demand. It also provides a solution for backing up all the data using `rsync`. While the setup was originally tested on a Raspberry Pi, it can be adapted for other systems.
-
-*Note*:  
-Be sure to replace `user` and the URLs with your local system username and WebDAV server details where appropriate.
+Backup a systemd-automounted WebDAV mount (e.g., NextCloud) to an external HDD using Ansible. Tested on Raspberry Pi running Raspbian Bookworm.
 
 ## Environment
 
 **Hardware**:
-- Raspberry Pi 3
-- External HDD
+- Raspberry Pi 3+ or compatible.
+- External HDD (NTFS).
 
 **OS**:
-- Raspbian GNU/Linux 12 (Bookworm)
+- Debian-based (e.g., Raspbian GNU/Linux 12).
 
 **Packages**:
 - systemd
 - davfs2
+- ansible
+- rsync
+- ansible.posix (collection)
 
 ## Configuration
 
 ### `/etc/fstab`
 
-Add the following entries to your `/etc/fstab` to configure automounting for the NextCloud WebDAV and HDD:
+Automount NextCloud WebDAV and HDD:
 
 ```shell
-# NextCloud WebDAV automount - read-only, no execution, automatic mount with systemd
-https://nextcloud-server.tld/remote.php/dav/files/user /home/user/nextcloud davfs ro,user,noexec,nofail,_netdev,noauto,x-systemd.automount,x-systemd.mount-timeout=2min 0 0
+# NextCloud WebDAV automount - read-only, user-mountable
+https://nextcloud-server.tld/remote.php/dav/files/user /mnt/webdav davfs ro,user,noexec,nofail,_netdev,noauto,x-systemd.automount,x-systemd.mount-timeout=2min 0 0
 
-# External HDD automount - NTFS filesystem, read-write with systemd auto-mount and timeout
-/dev/sda1 /home/user/hdd ntfs x-systemd.automount,x-systemd.idle-timeout=2min,rw,sync 0 0
+# External HDD automount - NTFS, user-mountable
+/dev/sda1 /mnt/external ntfs user,x-systemd.automount,x-systemd.idle-timeout=2min,rw,sync 0 0
 ```
 
 ### `/etc/davfs2/secrets`
 
-Ensure that the following entry is present to store your WebDAV credentials securely. Replace `<user>` with your NextCloud username and generate an app password in NextCloud’s security settings.
+Securely store WebDAV creds:
 
 ```shell
-/home/user/nextcloud <user> <generate app password in nextcloud>
+/mnt/webdav user <app-password>
 ```
 
 ### `/etc/davfs2/davfs2.conf`
 
-### Disable Locks
-
-To disable file locking in `davfs2`, which can be necessary if you're facing issues with file locks in NextCloud (as it does not fully support WebDAV locking), add the following to your configuration:
+Disable locks and adjust cache:
 
 ```shell
 use_locks 0
-```
-
-Disabling locks can help avoid problems with stale or conflicting file locks when using WebDAV. However, be aware that this can also lead to issues in multi-user environments where multiple clients are modifying the same files.
-
-
-### Mount
-
-After adding the configurations to `/etc/fstab`, create the directories for the mount points and reload `systemd` to start automounting:
-
-```shell
-mkdir ~/nextcloud
-mkdir ~/hdd
-systemctl daemon-reload
-systemctl start home-user-nextcloud.automount
-systemctl start home-user-hdd.automount
-```
-
-## Backup
-
-### Bash Script
-
-You can either use the bash script available in the repository to back up all the data from the WebDAV mountpoint to the external HDD using `rsync` (`nextcloud-to-hdd-backup.sh`), or create your own with a similar command:
-
-```shell
-rsync -az --delete --partial "/home/user/nextcloud/" "/home/user/hdd/nextcloud-backup/"
-```
-
-This command will:
-
-- **`-a`**: Archive mode (preserves permissions, symlinks, etc.)
-- **`-z`**: Compress the data during transfer
-- **`--delete`**: Remove files from the backup directory that no longer exist in the source
-- **`--partial`**: Allows for resuming incomplete transfers
-
-It synchronizes the content from the NextCloud WebDAV mount to your external HDD, ensuring that the backup stays up to date and any deleted files are removed.
-
-### Automate the Backup
-
-To automate the backup, you can schedule the script to run periodically using cron. For example, to back up on the 1st day of each month at 2:00 AM, edit your crontab with `crontab -e` and add the following line:
-
-```shell
-# Backup at the 1st day of each month
-0 2 1 * * /home/user/nextcloud-to-hdd-backup.sh
-```
-
-## Troubleshooting
-
-You can view the automount unit logs to check when the directory mountpoints were triggered:
-
-```shell
-journalctl -u home-user-nextcloud.automount
-journalctl -u home-user-hdd.automount
-```
-
-If you encounter an error with exit code 255, review your mount options in `/etc/fstab`:
-
-```shell
-Oct 23 23:04:24 rpi systemd[1]: home-user-nextcloud.mount: Mount process exited, code=exited, status=255
-```
-
-Common causes of this issue include incorrect WebDAV URLs or network connectivity problems.
-
-## Known Issues
-
-### WebDAV Cache Size
-
-When backing up large files, `davfs2` caches each file to be read or written. By default, the cache size is set to 50 MB, which may impact performance.
-~~~shell
-Oct 24 01:31:21 rpi mount.davfs[6704]: open files exceed max cache size by 50 MiBytes
-~~~
-
-If your system has sufficient memory available, consider increasing the cache size for better performance:
-
-#### `/etc/davfs2/davfs2.conf`
-
-```shell
 cache_size 300
 ```
 
-From the `davfs2` man pages:
+### Mount
+
+Create directories, reload systemd:
 
 ```shell
-cache_size
-    The amount of disk space in MiByte that may be used. mount.davfs will always
-    take enough space to cache open files, ignoring this value if necessary.
-    Default: 50
+sudo mkdir /mnt/webdav /mnt/external
+sudo systemctl daemon-reload
+sudo systemctl start mnt-webdav.automount mnt-external.automount
 ```
 
-Make sure to monitor your system's available memory before adjusting this value.
+## Running the Playbook
+
+1. Clone repo and cd to `ansible` folder.
+2. Install Ansible collection: `ansible-galaxy collection install ansible.posix`.
+3. Adjust variables in the playbook (e.g., paths, services).
+4. Run: `ansible-playbook backup_webdav.yml --inventory localhost,`
+5. For tags: `--tags verify` or `--tags backup`.
+
+Features:
+- Verifies mounts and automounts.
+- Rsyncs WebDAV to compressed .tar.gz on external disk (keeps 3 versions).
+- Ignores sync errors (logs only).
+
+Automate via cron: `0 2 * * * /usr/bin/ansible-playbook /path/to/backup_webdav.yml --inventory localhost,`
+
+## Troubleshooting
+
+Check systemd logs: `journalctl -u mnt-webdav.automount -u mnt-external.automount`
+
+Common:
+- Mount fails (err 255): Check fstab URLs/network.
+- Rsync I/O errors: Inactive files/corruption—ignore with task options.
+- Permissions: Ensure user can mount (fstab `user` option).
+
+## Known Issues
+
+- Davfs2 cache limits: Increase `cache_size` for large files (monitor RAM).
+- No locks on NextCloud WebDAV.
 
 ## References
 
@@ -145,3 +95,6 @@ Make sure to monitor your system's available memory before adjusting this value.
 - [NextCloud does not support locks](https://docs.nextcloud.com/server/latest/user_manual/en/files/access_webdav.html#known-issues)
 - [systemd automount using davfs2 not working](https://discourse.osmc.tv/t/systemd-automount-using-davfs2-not-working/94200/5)
 - [Use curl instead of rsync to stream files and not use davfs2 cache](https://unix.stackexchange.com/questions/354026/disable-davfs2-caching)
+- [Ansible posix.synchronize](https://docs.ansible.com/ansible/latest/collections/ansible/posix/synchronize_module.html)
+- [Systemd automount with WebDAV](https://docs.nextcloud.com/server/latest/user_manual/en/files/access_webdav.html)
+- [Davfs2 config](https://linux.die.net/man/5/davfs2)
