@@ -63,6 +63,8 @@
         rsync_opts: ["--archive", "--delete", "--exclude=lost+found", "--exclude=*DS_Store*"]
         mode: push
       register: sync_result
+      ignore_errors: true  # Continue on failure, log errors
+      failed_when: false   # Treat as non-fatal
     
     - name: Archive the backup directory into a compressed tar.gz
       tags: backup
